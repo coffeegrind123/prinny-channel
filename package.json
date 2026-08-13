@@ -1,0 +1,35 @@
+{
+  "name": "prinny-channel-dev",
+  "version": "0.1.0",
+  "description": "Development harness for the Prinny Matrix channel plugin",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc -p plugin/tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint plugin/src test --ext .ts",
+    "lint:fix": "eslint plugin/src test --ext .ts --fix",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "dev:link": "npm install --no-save file:../prinny-bot"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@prinny/bot": "github:coffeegrind123/prinny-bot",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

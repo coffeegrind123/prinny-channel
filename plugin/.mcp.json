@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "prinny": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/prinny-channel.mjs"]
+    }
+  }
+}

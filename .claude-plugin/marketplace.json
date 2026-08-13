@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "prinny",
+  "owner": {
+    "name": "coffeegrind123",
+    "url": "https://github.com/coffeegrind123"
+  },
+  "metadata": {
+    "description": "Matrix channel for Claude Code, built on @prinny/bot."
+  },
+  "plugins": [
+    {
+      "name": "prinny",
+      "source": "./plugin",
+      "description": "Talk to your Claude Code session from any Matrix client. Pairing and allowlists, permission prompts as real buttons (with a plain-text fallback), end-to-end encryption, room history and search.",
+      "category": "integrations"
+    }
+  ]
+}

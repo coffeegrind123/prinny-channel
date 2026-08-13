@@ -1,0 +1,12 @@
+{
+  "name": "prinny",
+  "description": "Matrix channel for Claude Code — messaging bridge with built-in access control, inline-keyboard permission prompts, and room history. Manage pairing, allowlists, and policy via /prinny:access.",
+  "version": "0.1.0",
+  "keywords": [
+    "matrix",
+    "prinny",
+    "messaging",
+    "channel",
+    "mcp"
+  ]
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Channel state: credentials, the crypto store holding the bot's Olm identity
+# and room keys, downloaded attachments, the allowlist, and the staged runtime
+# (its own node_modules). None of it belongs in a repo, and two bots must never
+# share one crypto store.
+.prinny-channel/
+runtime/
+.env
+.env.*
+!.env.example
