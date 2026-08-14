@@ -12,22 +12,67 @@
  * So every inbound message is written here before it is handed to the session,
  * and removed only once it has been. That ordering is what makes it durable:
  * a crash between receiving and delivering leaves the message queued rather
- * than lost, and the watermark stops an already-delivered message coming back
- * on the next start.
+ * than lost, and the record of what has been delivered stops an
+ * already-delivered message coming back on the next start.
+ *
+ * "Already delivered" is decided by EVENT ID, never by timestamp. It was a
+ * timestamp once — anything at or below the watermark was treated as seen —
+ * and that silently dropped live messages, because `origin_server_ts` is not
+ * globally monotonic in arrival order:
+ *
+ *  - Across rooms. The startup catch-up replays the initial sync room by room,
+ *    so a room replayed second contributes timestamps older than the one
+ *    replayed first. Every message in it sat below the watermark the first room
+ *    had just pushed up, and was discarded unread.
+ *  - Within a room. An encrypted event whose megolm key has not arrived yet is
+ *    re-dispatched later, once it decrypts — that is the whole point of the
+ *    `MatrixEventEvent.Decrypted` listener in the bot, which exists so the
+ *    first message after a key rotation is not lost. By then a newer message
+ *    has advanced the watermark past it, so the queue threw away exactly the
+ *    message that listener was written to rescue.
+ *
+ * The watermark still exists, because it has a second and legitimate job: it
+ * is the floor for the next start's catch-up. It is no longer a filter.
  */
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { STATE_DIR, log } from './state.js';
 
 const QUEUE_FILE = join(STATE_DIR, 'queue.json');
 const WATERMARK_FILE = join(STATE_DIR, 'watermark.json');
+const DELIVERED_FILE = join(STATE_DIR, 'delivered.json');
 
 /** Keep the backlog to something a session can actually read on return. */
 export const MAX_QUEUED = 50;
 /** Older than this and the conversation has moved on without us. */
 export const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * How many delivered event ids to remember.
+ *
+ * This is what stops a re-answer, so it has to comfortably outlast one
+ * catch-up: the bot asks for `initialSyncLimit` events per room, so the bound
+ * that matters is that limit times the number of active rooms. Eviction is
+ * oldest-first, which is the right way round — a catch-up re-offers the NEWEST
+ * events per room, and those are the ids still held.
+ *
+ * Overflowing costs a duplicate message, not a lost one. That asymmetry is
+ * deliberate: this file is the only thing standing between a lost megolm key
+ * and a message nobody ever sees.
+ */
+export const MAX_DELIVERED_IDS = 1000;
+/**
+ * How far below the watermark the next start's catch-up reaches.
+ *
+ * The watermark is the newest delivered timestamp, but "newest" is per the
+ * ordering above — so a message that arrived while away with a slightly older
+ * timestamp (another room, a federated server running behind, an event that
+ * decrypted late) sits below it and the bot would filter it out before the
+ * queue ever saw it. Reaching back re-offers that window; the id record then
+ * discards whatever has genuinely been handled.
+ */
+export const CATCH_UP_GRACE_MS = 10 * 60 * 1000;
 
 export type QueuedMessage = {
   /** The Matrix event ID. Doubles as the dedupe key. */
@@ -84,6 +129,41 @@ export function writeWatermark(ts: number): void {
 }
 
 /**
+ * The floor for the next start's catch-up: the watermark, less a grace window.
+ *
+ * Zero means there is nothing delivered to measure "while away" against, and
+ * the caller should start from now rather than dumping room history into a
+ * fresh session.
+ */
+export function readCatchUpFloor(): number {
+  const watermark = readWatermark();
+  if (watermark === 0) return 0;
+
+  // First boot after the upgrade: there is a watermark from the old scheme but
+  // no record of which ids it stood for. Reaching back here would re-offer that
+  // window with nothing able to recognise it, and the session would answer ten
+  // minutes of conversation a second time. Hold the old floor for this one boot;
+  // the record starts filling on the first delivery and the grace window applies
+  // from the next.
+  if (!existsSync(DELIVERED_FILE)) return watermark;
+
+  return Math.max(1, watermark - CATCH_UP_GRACE_MS);
+}
+
+/** Event ids already handed to a session, newest last. */
+export function readDelivered(): string[] {
+  const ids = readJson<string[]>(DELIVERED_FILE, []);
+  return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+}
+
+function recordDelivered(id: string): void {
+  const ids = readDelivered();
+  if (ids.includes(id)) return;
+  ids.push(id);
+  writeJson(DELIVERED_FILE, ids.slice(-MAX_DELIVERED_IDS));
+}
+
+/**
  * Add a message, unless it is already queued or already delivered.
  *
  * Returns false when the message was a duplicate — worth knowing, because the
@@ -93,7 +173,10 @@ export function writeWatermark(ts: number): void {
 export function enqueue(message: QueuedMessage, now = Date.now()): boolean {
   const queue = readQueue();
   if (queue.some((entry) => entry.id === message.id)) return false;
-  if (message.ts <= readWatermark()) return false;
+  // By id, not by timestamp — see the note at the top of this file. A message
+  // is old news because it has been handed over, not because something newer
+  // happened to be processed first.
+  if (readDelivered().includes(message.id)) return false;
 
   queue.push(message);
   queue.sort((a, b) => a.ts - b.ts);
@@ -111,11 +194,15 @@ export function enqueue(message: QueuedMessage, now = Date.now()): boolean {
   return bounded.some((entry) => entry.id === message.id);
 }
 
-/** Remove a delivered message and advance the watermark past it. */
+/** Remove a delivered message, record its id, and advance the watermark. */
 export function markDelivered(id: string): void {
   const queue = readQueue();
   const delivered = queue.find((entry) => entry.id === id);
   writeQueue(queue.filter((entry) => entry.id !== id));
+  // The id first: it is what stops a re-answer, and it must be on disk before
+  // the watermark moves. Crashing between the two costs a duplicate; the other
+  // order would cost the message.
+  recordDelivered(id);
   if (delivered) writeWatermark(delivered.ts);
 }
 
@@ -148,3 +235,4 @@ export async function flush(
 /** Path helpers, so tests and the docs agree on where this lives. */
 export const QUEUE_PATH = QUEUE_FILE;
 export const WATERMARK_PATH = WATERMARK_FILE;
+export const DELIVERED_PATH = DELIVERED_FILE;

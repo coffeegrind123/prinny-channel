@@ -81,7 +81,7 @@ import {
 } from './inbox.js';
 import { isMentioned } from './mentions.js';
 import { PERMISSION_CALLBACK_RE, parsePermissionReply } from './permissions.js';
-import { enqueue, flush, readQueue, readWatermark } from './queue.js';
+import { enqueue, flush, readCatchUpFloor, readQueue } from './queue.js';
 import {
   CRYPTO_SNAPSHOT_PATH,
   CRYPTO_STORE_PATH,
@@ -155,8 +155,13 @@ function requireBot(): Bot {
 }
 
 function buildBot(deviceId: string | undefined): Bot {
-  const watermark = readWatermark();
-  if (watermark === 0) {
+  // Deliberately below the newest delivered message, not at it. The newest is
+  // only newest by timestamp, and timestamps do not arrive in order across
+  // rooms or after a late decryption — so a floor set exactly at the watermark
+  // makes the bot filter out messages that were never delivered. Reaching back
+  // re-offers that window; enqueue() discards the ones already handled by id.
+  const catchUpFloor = readCatchUpFloor();
+  if (catchUpFloor === 0) {
     log('no delivery watermark yet — starting from now, not from room history');
   }
   return new (requireMatrix().Bot)({
@@ -171,7 +176,7 @@ function buildBot(deviceId: string | undefined): Bot {
     // has been delivered, a floor of 0 means everything the initial sync
     // returns counts as missed, so a fresh install would dump the last fifty
     // messages of every room into the session as backlog.
-    ...(watermark > 0 ? { catchUpFrom: watermark } : {}),
+    ...(catchUpFloor > 0 ? { catchUpFrom: catchUpFloor } : {}),
     // Bounds the catch-up: it can only see what the initial sync returns per
     // room, so a long enough outage still loses the oldest of it.
     initialSyncLimit: 50,
