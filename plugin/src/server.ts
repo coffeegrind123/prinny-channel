@@ -92,6 +92,7 @@ import {
   readCredentials,
   updateEnvFile,
 } from './state.js';
+import { claimAccount, describeHolder, releaseAccount } from './account-lock.js';
 
 loadEnvFile();
 
@@ -128,6 +129,30 @@ try {
   // No pid file, not running, or `ps` unavailable (Windows). Carry on.
 }
 writeFileSync(PID_FILE, String(process.pid));
+
+// ── One bot per ACCOUNT ──────────────────────────────────────────────────────
+// The guard above is scoped to one STATE_DIR. On 2026-08-24 FOUR servers ran
+// from this one directory — sharing a device_id and a crypto store — alongside
+// a pi channel with its own directory, all on @openclaude:struct.ws, and the
+// account reached seven devices. It presented as "pairing is broken"; it was
+// four bots answering and an Olm identity no peer could encrypt to.
+//
+// That guard cannot see across directories, and its failure mode is silent: the
+// pid read, the `ps` check and the SIGTERM all sit inside `catch {}` before the
+// pid file is written unconditionally. This one is keyed on the ACCOUNT, taken
+// with O_EXCL, and refuses rather than takes over — a second bot corrupts state
+// that can only be re-minted, never repaired.
+const accountLock = claimAccount(creds.userId, creds.homeserverUrl, STATE_DIR, log);
+if (!accountLock.ok) {
+  process.stderr.write(
+    `prinny channel: ${creds.userId} is already served by ${describeHolder(accountLock.holder)}.\n` +
+      `Two bots on one Matrix account duplicate every message and corrupt the\n` +
+      `crypto store — this one is refusing to start rather than join it.\n` +
+      `Stop the other channel, or give this one its own Matrix account.\n` +
+      `Lock: ${accountLock.path}\n`,
+  );
+  process.exit(1);
+}
 
 // Without these the process dies silently on any unhandled rejection. With
 // them it logs and keeps serving tools.
@@ -1032,6 +1057,7 @@ function shutdown(): void {
     if (Number.parseInt(readFileSync(PID_FILE, 'utf8'), 10) === process.pid) {
       rmSync(PID_FILE, { force: true });
     }
+    releaseAccount(accountLock.path);
   } catch {
     // Already gone.
   }
