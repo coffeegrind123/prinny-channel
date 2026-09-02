@@ -1,0 +1,41 @@
+# Docs: <https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically/customizing-dependency-updates>
+#
+# Added 2026-09-02. Until then nothing watched this repo, and it carried the
+# same critical vitest advisory (CVSS 9.8, arbitrary file read and execute) and
+# the same fully-deprecated eslint 9.x line as prinny-bot. See that repo's
+# dependabot.yml for the fuller note.
+#
+# **Two npm entries, and both are load-bearing.** `/` is the development
+# harness; `/plugin` is the MCP server payload that actually ships. They have
+# separate manifests and only `/` has a lockfile, so a consumer installing the
+# plugin resolves against `plugin/package.json`'s declared floors — which is
+# exactly why those floors had drifted 30 minors behind on
+# @modelcontextprotocol/sdk without anything noticing. Watching only `/` would
+# leave the shipped artifact unwatched.
+#
+# No workflows in this repo yet, so no `github-actions` ecosystem is declared.
+# Add one in the same change as the first workflow.
+#
+# Note that this file governs *version* updates only. Dependabot *security*
+# updates are a repository setting — switch alerts and automated security fixes
+# on for this repo too.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: "tuesday"
+      time: "01:00"
+      timezone: "Europe/Helsinki"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: npm
+    directory: /plugin
+    schedule:
+      interval: weekly
+      day: "tuesday"
+      time: "01:00"
+      timezone: "Europe/Helsinki"
+    open-pull-requests-limit: 10
