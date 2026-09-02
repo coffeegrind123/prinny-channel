@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PERMISSION_CALLBACK_RE,
+  mayDecidePermission,
   parsePermissionReply,
 } from '../plugin/src/permissions.js';
 
@@ -67,5 +68,20 @@ describe('PERMISSION_CALLBACK_RE', () => {
     expect(PERMISSION_CALLBACK_RE.test('perm:elevate:abcde')).toBe(false);
     expect(PERMISSION_CALLBACK_RE.test('deploy:yes')).toBe(false);
     expect(PERMISSION_CALLBACK_RE.test('xperm:allow:abcde')).toBe(false);
+  });
+});
+
+describe('mayDecidePermission', () => {
+  it('lets a paired sender decide', () => {
+    expect(mayDecidePermission(['@you:example.org'], '@you:example.org')).toBe(true);
+  });
+
+  it('refuses a sender who is not on the paired list', () => {
+    // The case that matters: a member of an enabled shared room whose policy
+    // leaves `allowFrom` empty passes the inbound gate, so passing the gate
+    // cannot be what authorises a decision. Prompts only ever reach paired
+    // senders' direct rooms, so this refuses nobody who was meant to answer.
+    expect(mayDecidePermission(['@you:example.org'], '@stranger:evil.example')).toBe(false);
+    expect(mayDecidePermission([], '@anyone:example.org')).toBe(false);
   });
 });

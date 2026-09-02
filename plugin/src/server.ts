@@ -80,7 +80,11 @@ import {
   writeToInbox,
 } from './inbox.js';
 import { isMentioned } from './mentions.js';
-import { PERMISSION_CALLBACK_RE, parsePermissionReply } from './permissions.js';
+import {
+  PERMISSION_CALLBACK_RE,
+  mayDecidePermission,
+  parsePermissionReply,
+} from './permissions.js';
 import { enqueue, flush, readCatchUpFloor, readQueue } from './queue.js';
 import {
   CRYPTO_SNAPSHOT_PATH,
@@ -837,10 +841,22 @@ async function handleInbound(ctx: Context): Promise<void> {
   const text = ctx.text;
   const messageId = ctx.messageId;
 
-  // A permission answer is a decision, not conversation. The sender is already
-  // through the gate at this point, which is what makes trusting it safe.
+  // A permission answer is a decision, not conversation — but deciding is a
+  // capability over the whole session, not a per-room one, so it is gated on
+  // the paired-sender list exactly as the button path is (see the
+  // `callbackQuery` handler below).
+  //
+  // Passing the inbound gate is NOT enough on its own. In a shared room whose
+  // policy leaves `allowFrom` empty the gate admits any member, and permission
+  // prompts are only ever delivered to paired senders' direct rooms — so a
+  // room member who was never paired could otherwise answer a prompt they were
+  // never shown, which the buttons on that same prompt would refuse them.
+  //
+  // A sender who passes the gate but is not paired keeps their message as
+  // ordinary conversation: the gate said deliver, and only the privileged
+  // reading of it is withheld.
   const decision = parsePermissionReply(text);
-  if (decision) {
+  if (decision && mayDecidePermission(result.access.allowFrom, senderId)) {
     decidePermission(decision.requestId, decision.behavior);
     void ctx.react(decision.behavior === 'allow' ? '✅' : '❌').catch(() => undefined);
     return;
@@ -950,7 +966,7 @@ function registerHandlers(bot: Bot): void {
     if (!behavior || !requestId) return;
 
     const access = loadAccess();
-    if (!access.allowFrom.includes(ctx.from)) {
+    if (!mayDecidePermission(access.allowFrom, ctx.from)) {
       await ctx.answerCallbackQuery({ text: 'Not authorised.' }).catch(() => undefined);
       return;
     }
@@ -1040,6 +1056,12 @@ function wireInvites(): void {
 setInterval(() => {
   if (!started) return;
   checkApprovals(async (roomId, text) => {
+    // Same outbound gate as every other send. The approval file is written by
+    // the local skill after it has already added the sender to `allowFrom`, so
+    // their direct room is allowlisted by the time this runs and the confirmation
+    // still goes out — this only stops the one send that used to take a room id
+    // on trust.
+    assertTargetRoom(roomId);
     await requireBot().api.sendMessage(roomId, text);
   });
 }, 5000).unref();
