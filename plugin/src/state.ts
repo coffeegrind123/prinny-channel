@@ -61,6 +61,22 @@ export function loadEnvFile(): void {
  * Used to persist the access token minted by a password login, so the bot
  * stops re-logging-in — and stops minting a new device — on every boot.
  */
+/**
+ * `.env` is line-oriented and `loadEnvFile` copies every `KEY=VALUE` it parses
+ * into `process.env`. A value carrying a newline therefore does not store a
+ * string - it appends new assignments. `access_token` and `device_id` are
+ * chosen by the homeserver, which this project treats as untrusted, so an
+ * injected `PRINNY_ALLOW_UNENCRYPTED=1` would silently disable the plaintext
+ * guard while the operator believed E2EE was on. A Matrix token or device id is
+ * opaque but is never legitimately multi-line.
+ */
+function assertEnvValue(key: string, value: string): string {
+  if (/[\r\n\u0000]/.test(value)) {
+    throw new Error(`refusing to write ${key}: value contains a control character`);
+  }
+  return value;
+}
+
 export function updateEnvFile(updates: Record<string, string>): void {
   mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
   let lines: string[] = [];
@@ -69,7 +85,8 @@ export function updateEnvFile(updates: Record<string, string>): void {
   } catch {
     // First write.
   }
-  for (const [key, value] of Object.entries(updates)) {
+  for (const [key, rawValue] of Object.entries(updates)) {
+    const value = assertEnvValue(key, rawValue);
     const index = lines.findIndex((line) => new RegExp(`^\\s*${key}\\s*=`).test(line));
     if (index >= 0) lines[index] = `${key}=${value}`;
     else lines.push(`${key}=${value}`);

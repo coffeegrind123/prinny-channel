@@ -262,7 +262,10 @@ export function commandGate(
  */
 export function assertAllowedRoom(roomId: string, directRoomIds: ReadonlySet<string>): void {
   const access = loadAccess();
-  if (roomId in access.rooms) return;
+  // `in` also answers true for inherited Object.prototype keys ('toString',
+  // 'constructor', '__proto__'), which are not room ids but would have passed
+  // this gate. Own-property only.
+  if (Object.prototype.hasOwnProperty.call(access.rooms, roomId)) return;
   if (directRoomIds.has(roomId)) return;
   throw new Error(
     `room ${roomId} is not allowlisted — enable it with /prinny:access room add ${roomId}`

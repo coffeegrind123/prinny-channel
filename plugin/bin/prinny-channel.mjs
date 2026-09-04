@@ -224,14 +224,19 @@ function withLock(fn) {
  * where package.json's dependency is used as written.
  */
 function siblingBotCheckout() {
-  if (process.env.PRINNY_BOT_PATH) return process.env.PRINNY_BOT_PATH
-  // The payload lives one level down from the repo root, which itself sits
-  // beside prinny-bot in the monorepo — so both levels are worth checking.
-  const candidates = [
-    join(dirname(PLUGIN_ROOT), 'prinny-bot'),
-    join(dirname(dirname(PLUGIN_ROOT)), 'prinny-bot'),
-  ]
-  return candidates.find((path) => existsSync(join(path, 'package.json'))) ?? null
+  // OPT-IN ONLY. This used to probe two directories beside the installed plugin
+  // and `npm install file:` the first one it found — which runs that package's
+  // lifecycle scripts. Anyone able to create a directory named `prinny-bot` at
+  // either probed location got code execution in the bootstrap, inside the
+  // process that goes on to read the Matrix credentials and the crypto store.
+  // Development against a local checkout is now a deliberate act.
+  const explicit = process.env.PRINNY_BOT_PATH
+  if (!explicit) return null
+  if (!existsSync(join(explicit, 'package.json'))) {
+    log(`PRINNY_BOT_PATH is set to ${explicit} but there is no package.json there — ignoring`)
+    return null
+  }
+  return explicit
 }
 
 function stageRuntime(fingerprint) {
@@ -247,12 +252,20 @@ function stageRuntime(fingerprint) {
   cpSync(join(PLUGIN_ROOT, 'src'), join(RUNTIME_DIR, 'src'), { recursive: true })
 
   log(`preparing runtime in ${RUNTIME_DIR}`)
-  run('npm', ['install', '--no-audit', '--no-fund'], 'npm install')
+  // --ignore-scripts: install-time lifecycle scripts run arbitrary code from
+  // every transitive package, in the process that holds this user's Matrix
+  // credentials. Native binaries still resolve from platform-specific optional
+  // dependencies, which npm installs regardless of this flag.
+  run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts'], 'npm install')
 
   const sibling = siblingBotCheckout()
   if (sibling) {
     log(`using the local @prinny/bot checkout at ${sibling}`)
-    run('npm', ['install', '--no-save', '--no-audit', '--no-fund', `file:${sibling}`], 'local link')
+    run(
+      'npm',
+      ['install', '--no-save', '--no-audit', '--no-fund', '--ignore-scripts', `file:${sibling}`],
+      'local link'
+    )
   }
 
   // Check the dependency actually arrived with something in it. A git

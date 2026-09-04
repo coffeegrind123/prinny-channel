@@ -81,6 +81,37 @@ export function sanitizeName(name: string | undefined): string | undefined {
   return name.replace(/[<>[\]\r\n;/\\]/g, '_').slice(0, 120) || undefined;
 }
 
+/**
+ * Neutralise a sender-controlled value that becomes a `<channel>` meta
+ * attribute or body text.
+ *
+ * `sanitizeName` above existed for exactly this reason but was only ever
+ * applied to `attachment_name`, while its neighbours - the sender's own display
+ * name, the attachment MIME, and the message body - went through raw. A display
+ * name is chosen by the sender and can be changed per room, so a quote in it
+ * could forge a sibling attribute such as `image_path`, which is the one field
+ * deliberately kept in meta precisely so a sender could NOT forge it.
+ *
+ * Quotes and angle brackets are removed rather than entity-encoded: this text
+ * is read by a model, not parsed as HTML, so a visible `_` is clearer than an
+ * escape sequence and cannot be un-escaped by a later transform.
+ */
+export function sanitizeMetaValue(
+  value: string | undefined,
+  max = 240
+): string | undefined {
+  if (!value) return undefined;
+  return (
+    value
+      // C0/C1 controls, including CR and LF, plus the tag delimiters and quotes.
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+      .replace(/[<>"'`]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, max) || undefined
+  );
+}
+
 /** Write an inbound attachment to the inbox and return its path. */
 export function writeToInbox(data: Buffer, filename: string, eventId: string): string {
   mkdirSync(INBOX_DIR, { recursive: true, mode: 0o700 });

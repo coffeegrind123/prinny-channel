@@ -196,6 +196,15 @@ export async function searchMessages(
   return { ok: true, results, count: roomEvents?.count ?? results.length };
 }
 
+/**
+ * Collapse a message body to a single line for the compact transcript format.
+ * Newlines become a visible marker rather than a real break, so multi-line
+ * content is still readable but cannot introduce a forged entry.
+ */
+function flattenText(text: string): string {
+  return text.replace(/\r\n?|\n/g, ' \u23ce ').replace(/[\u0000-\u001f\u007f]/g, ' ');
+}
+
 /** Render history as one compact line per message. */
 export function renderHistory(entries: HistoryEntry[]): string {
   if (entries.length === 0) return '(no messages)';
@@ -205,7 +214,12 @@ export function renderHistory(entries: HistoryEntry[]): string {
         ? ` [${entry.attachment.kind}${entry.attachment.name ? `: ${entry.attachment.name}` : ''}]`
         : '';
       const edited = entry.edited ? ' (edited)' : '';
-      return `${entry.ts} ${entry.sender} ${entry.event_id}${edited}: ${entry.text}${attachment}`;
+      // One entry must render as exactly one line. A body containing a newline
+      // followed by a well-formed `<ts> <sender> <event_id>: ...` sequence would
+      // otherwise be indistinguishable from a real line, letting any member put
+      // words into another user's mouth - including the operator's - in the
+      // transcript the assistant reads.
+      return `${entry.ts} ${entry.sender} ${entry.event_id}${edited}: ${flattenText(entry.text)}${attachment}`;
     })
     .join('\n');
 }

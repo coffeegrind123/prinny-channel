@@ -78,6 +78,7 @@ import {
   kindForPath,
   sanitizeName,
   writeToInbox,
+  sanitizeMetaValue,
 } from './inbox.js';
 import { isMentioned } from './mentions.js';
 import {
@@ -97,6 +98,14 @@ import {
   updateEnvFile,
 } from './state.js';
 import { claimAccount, describeHolder, releaseAccount } from './account-lock.js';
+
+/**
+ * The message body may legitimately be multi-line, so newlines are kept - but a
+ * body must not be able to close the `<channel>` block or open a new tag.
+ */
+function sanitizeBody(text: string): string {
+  return text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').replace(/[<>]/g, '_');
+}
 
 loadEnvFile();
 
@@ -874,14 +883,18 @@ async function handleInbound(ctx: Context): Promise<void> {
   const queued = enqueue({
     id: messageId,
     ts: ctx.event.getTs(),
-    content: text || (attachment ? `(${attachment.kind})` : ''),
+    // Body text is sender-controlled and shares the `<channel>` block with the
+    // structural meta below, so it is neutralised on the same terms.
+    content: sanitizeBody(text) || (attachment ? `(${attachment.kind})` : ''),
     meta: {
       room_id: roomId,
       // Emitted under both names: `chat_id` is what the other channel
       // plugins use, and costs nothing to keep compatible.
       chat_id: roomId,
       message_id: messageId,
-      user: ctx.fromName,
+      // Sender-chosen, per-room, and changeable at will - the classic forging
+      // vector for the sibling attributes below.
+      user: sanitizeMetaValue(ctx.fromName) ?? senderId,
       user_id: senderId,
       ts: new Date(ctx.event.getTs()).toISOString(),
       is_direct: String(ctx.isDirect),
@@ -892,7 +905,9 @@ async function handleInbound(ctx: Context): Promise<void> {
         ? {
             attachment_kind: attachment.kind,
             ...(attachment.name ? { attachment_name: attachment.name } : {}),
-            ...(attachment.mime ? { attachment_mime: attachment.mime } : {}),
+            ...(attachment.mime
+              ? { attachment_mime: sanitizeMetaValue(attachment.mime, 128) ?? '' }
+              : {}),
             ...(attachment.size != null
               ? { attachment_size: String(attachment.size) }
               : {}),
@@ -966,6 +981,20 @@ function registerHandlers(bot: Bot): void {
     if (!behavior || !requestId) return;
 
     const access = loadAccess();
+    // The POLICY check, which the message path gets from gate() and this path
+    // used to skip entirely. `dmPolicy: 'disabled'` is documented in ACCESS.md
+    // as "Drop everything, allowlisted senders included" - but a plain-text
+    // reply matching a button label is rewritten into a callback by the router,
+    // so bot.on('message') never fires for it and the gate never ran. An
+    // operator who suspended the channel still had a live approval surface.
+    if (access.dmPolicy === 'disabled') {
+      await ctx.answerCallbackQuery({ text: 'Channel disabled.' }).catch(() => undefined);
+      return;
+    }
+
+    // The AUTHORIZATION check. Deliberately the stricter paired list rather than
+    // per-room policy, because a permission decision is authority over the whole
+    // session - see permissions.ts.
     if (!mayDecidePermission(access.allowFrom, ctx.from)) {
       await ctx.answerCallbackQuery({ text: 'Not authorised.' }).catch(() => undefined);
       return;

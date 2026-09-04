@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@prinny/bot": "github:coffeegrind123/prinny-bot",
+    "@prinny/bot": "github:coffeegrind123/prinny-bot#1e3518a4d932c511fea60b58d917acda658f82f4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
