@@ -19,7 +19,7 @@
     "dev:link": "npm install --no-save file:../prinny-bot"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@prinny/bot": "github:coffeegrind123/prinny-bot",
     "zod": "^4.4.3"
   },
