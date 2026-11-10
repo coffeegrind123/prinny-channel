@@ -15,9 +15,9 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@prinny/bot": "github:coffeegrind123/prinny-bot#1e3518a4d932c511fea60b58d917acda658f82f4",
-    "zod": "^4.4.3"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@prinny/bot": "github:coffeegrind123/prinny-bot#48ee78ab6745b797c989e7063552ac89d81a5fe4",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
