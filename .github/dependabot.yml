@@ -30,6 +30,17 @@ updates:
       time: "01:00"
       timezone: "Europe/Helsinki"
     open-pull-requests-limit: 10
+    ignore:
+      # The plugin supports Node >= 20.11 (engines). Types from a newer Node
+      # major type-check code against APIs Node 20 and 22 do not have. Raise
+      # this together with `engines`.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint (8.72) accepts typescript < 6.1 only, so TypeScript 7
+      # breaks linting. Drop this once typescript-eslint supports 7
+      # (typescript-eslint/typescript-eslint#10940).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /plugin
@@ -39,3 +50,14 @@ updates:
       time: "01:00"
       timezone: "Europe/Helsinki"
     open-pull-requests-limit: 10
+    ignore:
+      # The plugin supports Node >= 20.11 (engines). Types from a newer Node
+      # major type-check code against APIs Node 20 and 22 do not have. Raise
+      # this together with `engines`.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint (8.72) accepts typescript < 6.1 only, so TypeScript 7
+      # breaks linting. Drop this once typescript-eslint supports 7
+      # (typescript-eslint/typescript-eslint#10940).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
