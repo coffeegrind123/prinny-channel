@@ -104,6 +104,7 @@ export function sanitizeMetaValue(
   return (
     value
       // C0/C1 controls, including CR and LF, plus the tag delimiters and quotes.
+      // eslint-disable-next-line no-control-regex -- stripping control characters is the point
       .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
       .replace(/[<>"'`]/g, '_')
       .replace(/\s+/g, ' ')

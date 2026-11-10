@@ -71,6 +71,7 @@ export function loadEnvFile(): void {
  * opaque but is never legitimately multi-line.
  */
 function assertEnvValue(key: string, value: string): string {
+  // eslint-disable-next-line no-control-regex -- rejecting NUL and line breaks is the point
   if (/[\r\n\u0000]/.test(value)) {
     throw new Error(`refusing to write ${key}: value contains a control character`);
   }

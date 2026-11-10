@@ -104,6 +104,7 @@ import { claimAccount, describeHolder, releaseAccount } from './account-lock.js'
  * body must not be able to close the `<channel>` block or open a new tag.
  */
 function sanitizeBody(text: string): string {
+  // eslint-disable-next-line no-control-regex -- stripping control characters is the point
   return text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').replace(/[<>]/g, '_');
 }
 

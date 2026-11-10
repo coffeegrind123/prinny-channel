@@ -202,6 +202,7 @@ export async function searchMessages(
  * content is still readable but cannot introduce a forged entry.
  */
 function flattenText(text: string): string {
+  // eslint-disable-next-line no-control-regex -- stripping control characters is the point
   return text.replace(/\r\n?|\n/g, ' \u23ce ').replace(/[\u0000-\u001f\u007f]/g, ' ');
 }
 
